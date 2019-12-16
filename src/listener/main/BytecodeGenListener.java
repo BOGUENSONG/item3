@@ -1,23 +1,12 @@
 package listener.main;
 
-import java.util.Hashtable;
 
-import org.antlr.v4.runtime.ParserRuleContext;
-import org.antlr.v4.runtime.tree.ErrorNode;
 import org.antlr.v4.runtime.tree.ParseTreeListener;
 import org.antlr.v4.runtime.tree.ParseTreeProperty;
-import org.antlr.v4.runtime.tree.TerminalNode;
-
 import generated.MiniCBaseListener;
 import generated.MiniCParser;
-import generated.MiniCParser.ExprContext;
-import generated.MiniCParser.Fun_declContext;
-import generated.MiniCParser.Local_declContext;
 import generated.MiniCParser.ParamsContext;
-import generated.MiniCParser.ProgramContext;
-import generated.MiniCParser.StmtContext;
-import generated.MiniCParser.Type_specContext;
-import generated.MiniCParser.Var_declContext;
+
 
 import static listener.main.BytecodeGenListenerHelper.*;
 import static listener.main.SymbolTable.*;
@@ -81,8 +70,6 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 	
 	@Override
 	public void exitProgram(MiniCParser.ProgramContext ctx) {
-		String classProlog = getFunProlog();
-		
 		String fun_decl = "", var_decl = "";
 		
 		for(int i = 0; i < ctx.getChildCount(); i++) {
@@ -92,7 +79,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 				var_decl += newTexts.get(ctx.decl(i));
 		}
 		
-		newTexts.put(ctx, classProlog + var_decl + fun_decl);
+		newTexts.put(ctx, var_decl + fun_decl);
 		
 		System.out.println(newTexts.get(ctx));
 	}	
@@ -158,7 +145,8 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 		String stmt = newTexts.get(ctx.stmt());
 		
 		String temp ="";
-		temp = loop + ":\n" +expr +  "ifeq " + escape + "\n" + stmt + "goto " + loop + "\n" + escape + ":\n";
+//		temp = loop + ":\n" +expr +  "ifeq " + escape + "\n" + stmt + "goto " + loop + "\n" + escape + ":\n";
+		temp = loop + ":\n" + expr + "jg " + escape + "\n"+ stmt + "jmp " + loop + "\n" + escape + ":\n";
 		newTexts.put(ctx, temp);
 
 	}
@@ -174,11 +162,11 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 		
 		//void타입의 경우 마지막에 return이 붙기 때문에 여기서 처리해준다.
 		if (type_spec.equals("void")) {
-			stmt = funcHeader(ctx,ident) + compound_stmt + "return\n" + ".end method\n";
+			stmt = funcHeader(ctx,ident) + compound_stmt + "nop\n" + " pop rbp\n"+" ret\n";
 		}
 		
 		else {
-			stmt = funcHeader(ctx,ident) + compound_stmt + ".end method\n";
+			stmt = funcHeader(ctx,ident) + compound_stmt + " pop rbp\n" + " ret" + "\n" ;
 		}
 
 		
@@ -189,9 +177,22 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 
 	private String funcHeader(MiniCParser.Fun_declContext ctx, String fname) {
 		
-		return ".method public static " + symbolTable.getFunSpecStr(fname) + "\n"	
-				+ "\t" + ".limit stack " 	+ getStackSize(ctx) + "\n"
-				+ "\t" + ".limit locals " 	+ getLocalVarSize(ctx) + "\n";
+		String variables = "";
+		MiniCParser.ParamsContext params = ctx.params();
+		for (int i = 0 ; i < params.param().size();i++) {
+			symbolTable.push_argStack(); //Stack에 parameter 개수만큼 push한다.
+		}
+		for (int i = 0,j = -4 ; i < params.param().size();i++) {
+			
+			variables += String.format(" mov DWORD PTR [rbp%d], %s\n",j,symbolTable.get_argRegister());
+			j = j-4;
+			
+		}
+		return symbolTable.getFunSpecStr(fname) + "\n"	
+//				+ "\t" + ".limit stack " 	+ getStackSize(ctx) + "\n"
+//				+ "\t" + ".limit locals " 	+ getLocalVarSize(ctx) + "\n";
+				+ " push rbp\n"
+				+ " mov rbp, rsp" + "\n" + variables;
 				 	
 	}
 	
@@ -217,8 +218,9 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 		
 		if (isDeclWithInit(ctx)) {
 			String vId = symbolTable.getVarId(ctx);
-			varDecl += "ldc " + ctx.LITERAL().getText() + "\n"
-					+ "istore_" + vId + "\n"; 			
+			varDecl += " mov DWORD PTR [rbp" + vId + "]"+ ", " + ctx.LITERAL().getText() + "\n"; 
+//			varDecl += "ldc " + ctx.LITERAL().getText() + "\n"
+//					+ "istore_" + vId + "\n";
 		}
 		
 		newTexts.put(ctx, varDecl);
@@ -254,16 +256,16 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 		
 		if(noElse(ctx)) {		
 			stmt += condExpr + "\n"
-				+ "ifeq " + lend + "\n"
+				+ "je " + lend + "\n"
 				+ thenStmt + "\n"
 				+ lend + ":"  + "\n";	
 		}
 		else {
 			String elseStmt = newTexts.get(ctx.stmt(1));
 			stmt += condExpr + "\n"
-					+ "ifeq " + lelse + "\n"
+					+ "je " + lelse + "\n"
 					+ thenStmt + "\n"
-					+ "goto " + lend + "\n"
+					+ "jmp " + lend + "\n"
 					+ lelse + ": " + elseStmt + "\n"
 					+ lend + ":"  + "\n";	
 		}
@@ -276,16 +278,15 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 	@Override
 	public void exitReturn_stmt(MiniCParser.Return_stmtContext ctx) {
 			// <(4) Fill here>
-		String RETURN = ctx.RETURN().getText();
 		String returnStmt;
 		
 		if(ctx.expr() != null) {	// RETURN expr ';'
 			String expr = newTexts.get(ctx.expr());
-			returnStmt = expr + "i" + RETURN + "\n";
+			returnStmt = expr;
 		}
 		else{
-			// RETURN ';'
-			returnStmt = RETURN + "\n";
+			// RETURN ';' 이 경우는 반환값이 VOID설정일 때인데, exitFunc_decl에서 관리해주도록 한다.
+			returnStmt = "";
 		}
 			
 		
@@ -306,16 +307,17 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 			if(ctx.IDENT() != null) {
 				String idName = ctx.IDENT().getText();
 				if(symbolTable.getVarType(idName) == Type.INT) {
-					expr += "iload_" + symbolTable.getVarId(idName) + " \n";
+					expr += " mov " + symbolTable.push_Register() + ", DWORD PTR [rbp" + symbolTable.getVarId(idName) + "] \n";
 				}
 				//else	// Type int array => Later! skip now..
 				//	expr += "           lda " + symbolTable.get(ctx.IDENT().getText()).value + " \n";
 				} else if (ctx.LITERAL() != null) {
 					String literalStr = ctx.LITERAL().getText();
-					expr += "ldc " + literalStr + " \n";
+					expr += " mov " + symbolTable.push_argStack() + ", " +literalStr + " \n";
 				}
-			} else if(ctx.getChildCount() == 2) { // UnaryOperation
-			expr = handleUnaryExpr(ctx, newTexts.get(ctx) + expr);			
+			} 
+		else if(ctx.getChildCount() == 2) { // UnaryOperation
+			expr = handleUnaryExpr(ctx,expr);			
 		}
 		else if(ctx.getChildCount() == 3) {	 
 			if(ctx.getChild(0).getText().equals("(")) { 		// '(' expr ')'
@@ -346,28 +348,20 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 
 
 	private String handleUnaryExpr(MiniCParser.ExprContext ctx, String expr) {
-		String l1 = symbolTable.newLabel();
-		String l2 = symbolTable.newLabel();
-		String lend = symbolTable.newLabel();
 		
-		expr += newTexts.get(ctx.expr(0));
+		expr += newTexts.get(ctx.expr(0)) ;
 		switch(ctx.getChild(0).getText()) {
 		case "-":
-			expr += "           ineg \n"; break;
+			expr += " neg " + symbolTable.getRegister() + "\n"; break;
 		case "--":
-			expr += "ldc 1" + "\n"
-					+ "isub" + "\n";
+			expr += " sub " + symbolTable.getRegister() + ", 1\n";
 			break;
 		case "++":
-			expr += "ldc 1" + "\n"
-					+ "iadd" + "\n";
+			expr += " add " + symbolTable.getRegister() + ", 1\n";
 			break;
 		case "!":
-			expr += "ifeq " + l2 + "\n"
-					+ l1 + ": " + "ldc 0" + "\n"
-					+ "goto " + lend + "\n"
-					+ l2 + ": " + "ldc 1" + "\n"
-					+ lend + ": " + "\n";
+			expr += " cmp " + symbolTable.getRegister() + ", 0\n"
+			+ " sete al\n" + " movzx " + symbolTable.push_Register() +", al\n";
 			break;
 		}
 		return expr;
@@ -381,98 +375,107 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 		expr += newTexts.get(ctx.expr(0));
 		expr += newTexts.get(ctx.expr(1));
 		
+		String reg1 = symbolTable.getRegister();
+		String reg2 = symbolTable.getRegister();
 		switch (ctx.getChild(1).getText()) {
+
 			case "*":
-				expr += "imul \n"; break;
+				expr += " imul " + reg1 + ", " + reg2 + "\n";
+				symbolTable.push_hasRegName(reg1);
+				break;
 			case "/":
-				expr += "idiv \n"; break;
+				expr += " idiv " + reg1 + ", " + reg2 + "\n";
+				symbolTable.push_hasRegName(reg1);
+				break;
 			case "%":
-				expr += "irem \n"; break;
+				expr += "Error 어셈블리는 나머지연산없음"; break; //어셈블리는 나머지연산이없다
 			case "+":		// expr(0) expr(1) iadd
-				expr += "iadd \n"; break;
+				expr += " add " + reg1 + ", " +  reg2 + "\n"; 
+				symbolTable.push_hasRegName(reg1);
+				break;
 			case "-":
-				expr += "isub \n"; break;
-				
+				expr += " sub " + reg1 + ", " +  reg2 + "\n"; 
+				symbolTable.push_hasRegName(reg1);
+				break;
 			case "==":
-				expr += "isub " + "\n"
-						+ "ifeq "+l2+ "\n"
-						+ "ldc 0" + "\n"
-						+ "goto " + lend + "\n"
-						+ l2 + ": " + "ldc 1" + "\n"
+				expr += " cmp "+ reg1 + ", " + reg2 + "\n"
+						+ " je " + l2 + "\n"
+						+ " mov eax 0" + "\n"
+						+ " jmp " + lend + "\n"
+						+ l2 + ": \n" + " mov eax 1" + "\n"
 						+ lend + ": " + "\n";
+				symbolTable.push_hasRegName(reg1);
 				break;
 			case "!=":
-				expr += "isub " + "\n"
-						+ "ifne "+l2+ "\n"
-						+ "ldc 0" + "\n"
-						+ "goto " + lend + "\n"
-						+ l2 + ": " + "ldc 1" + "\n"
+				expr += " cmp "+ reg1 + ", " + reg2 + "\n"
+						+ " jne " + l2 + "\n"
+						+ " mov eax 0" + "\n"
+						+ " jmp " + lend + "\n"
+						+ l2 + ": \n" + " mov eax 1" + "\n"
 						+ lend + ": " + "\n";
+				symbolTable.push_hasRegName(reg1);
 				break;
 			case "<=":
 				// <(5) Fill here>
-				expr += 
-						"if_icmple "+ l2 + "\n"
-						+ "ldc 0" + "\n"
-						+ "goto " + lend + "\n"
-						+ l2 + ": \n" + "ldc 1" + "\n"
-						+ lend + ": \n";
+				expr += " cmp "+ reg1 + ", " + reg2 + "\n"
+						+ " jle " + l2 + "\n"
+						+ " mov eax 0" + "\n"
+						+ " jmp " + lend + "\n"
+						+ l2 + ": \n" + " mov eax 1" + "\n"
+						+ lend + ": " + "\n";
+				symbolTable.push_hasRegName(reg1);
 				break;
 			case "<":
 				// <(6) Fill here>
-				expr += 
-						"if_icmplt "+ l2 + "\n"
-						+ "ldc 0" + "\n"
-						+ "goto " + lend + "\n"
-						+ l2 + ": \n" + "ldc 1" + "\n"
-						+ lend + ": \n";
+				expr += " cmp "+ reg1 + ", " + reg2 + "\n"
+						+ " jl " + l2 + "\n"
+						+ " mov eax 0" + "\n"
+						+ " jmp " + lend + "\n"
+						+ l2 + ": \n" + " mov eax 1" + "\n"
+						+ lend + ": " + "\n";
+				symbolTable.push_hasRegName(reg1);
 				break;
 
 			case ">=":
 				// <(7) Fill here>
-				expr += 
-						"if_icmpge " + l2 + "\n"
-						+ "ldc 0" + "\n"
-						+ "goto " + lend + "\n"
-						+ l2 + ": \n" + "ldc 1" + "\n"
-						+ lend + ": \n";
+				expr += " cmp "+ reg1 + ", " + reg2 + "\n"
+						+ " jge " + l2 + "\n"
+						+ " mov eax 0" + "\n"
+						+ " jmp " + lend + "\n"
+						+ l2 + ": \n" + " mov eax 1" + "\n"
+						+ lend + ": " + "\n";
+				symbolTable.push_hasRegName(reg1);
 
 				break;
 
 			case ">":
 				// <(8) Fill here>
-				expr += 
-						"if_icmpgt "+ l2+ "\n"
-						+ "ldc 0" + "\n"
-						+ "goto " + lend + "\n"
-						+ l2 + ": \n" + "ldc 1" + "\n"
-						+ lend + ": \n";
+				expr += " cmp "+ reg1 + ", " + reg2 + "\n"
+						+ " jg " + l2 + "\n"
+						+ " mov eax 0" + "\n"
+						+ " jmp " + lend + "\n"
+						+ l2 + ": \n" + " mov eax 1" + "\n"
+						+ lend + ": " + "\n";
+				symbolTable.push_hasRegName(reg1);
 				break;
 
-			case "and":
-				expr +=  "ifne "+ lend + "\n"
-						+ "pop" + "\n" + "ldc 0" + "\n"
-						+ lend + ": " + "\n"; break;
-			case "or":
-				// <(9) Fill here>
-				expr += "ifeq" + lend + "\n"
-						+ "pop" + "\n" + "ldc 1" + "\n"
-						+ lend + ": " + "\n"; break;
+//			case "and":
+//				expr +=  "je "+ lend + "\n"
+//						+ "pop" + "\n" + "ldc 0" + "\n"
+//						+ lend + ": " + "\n"; break;
+//			case "or":
+//				// <(9) Fill here>
+//				expr += "ifeq" + lend + "\n"
+//						+ "pop" + "\n" + "ldc 1" + "\n"
+//						+ lend + ": " + "\n"; break;
 
 		}
 		return expr;
 	}
 	private String handleFunCall(MiniCParser.ExprContext ctx, String expr) {
 		String fname = getFunName(ctx);		
-
-		if (fname.equals("_print")) {		// System.out.println	
-			expr = "getstatic java/lang/System/out Ljava/io/PrintStream; " + "\n"
-			  		+ newTexts.get(ctx.args()) 
-			  		+ "invokevirtual " + symbolTable.getFunSpecStr("_print") + "\n";
-		} else {	
-			expr = newTexts.get(ctx.args()) 
-					+ "invokestatic " + getCurrentClassName()+ "/" + symbolTable.getFunSpecStr(fname) + "\n";
-		}	
+		expr = newTexts.get(ctx.args()) 
+				+ " call " + symbolTable.getFunSpecStr(fname) + "\n";
 		
 		return expr;
 			
@@ -482,12 +485,13 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 	@Override
 	public void exitArgs(MiniCParser.ArgsContext ctx) {
 
-		String argsStr = "\n";
+		String argsStr = "";
 		
 		for (int i=0; i < ctx.expr().size() ; i++) {
 			argsStr += newTexts.get(ctx.expr(i)) ; 
 		}		
 		newTexts.put(ctx, argsStr);
 	}
+
 
 }

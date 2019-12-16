@@ -1,6 +1,5 @@
 package listener.main;
 
-import java.util.Hashtable;
 
 import generated.MiniCParser;
 import generated.MiniCParser.ExprContext;
@@ -11,8 +10,6 @@ import generated.MiniCParser.ParamContext;
 import generated.MiniCParser.ParamsContext;
 import generated.MiniCParser.Type_specContext;
 import generated.MiniCParser.Var_declContext;
-import listener.main.SymbolTable;
-import listener.main.SymbolTable.VarInfo;
 
 public class BytecodeGenListenerHelper {
 	
@@ -92,10 +89,17 @@ public class BytecodeGenListenerHelper {
 	static String getParamTypesText(ParamsContext params) {
 		String typeText = "";
 		
-		for(int i = 0; i < params.param().size(); i++) {
+		for(int i = 0; i < params.param().size()-1; i++) {
 			MiniCParser.Type_specContext typespec = (MiniCParser.Type_specContext)  params.param(i).getChild(0);
-			typeText += getTypeText(typespec); // + ";";
+			typeText += getTypeText(typespec) + ", "; // 모든 parameter들 넣기
 		}
+		if(!params.param().isEmpty())
+		{
+			MiniCParser.Type_specContext typespec = (MiniCParser.Type_specContext)  params.param(params.param().size()-1).getChild(0);
+			typeText += getTypeText(typespec); // 마지막 parameter	
+		}
+		
+		
 		return typeText;
 	}
 	
@@ -118,24 +122,6 @@ public class BytecodeGenListenerHelper {
 		return ctx.getChildCount() < 5;
 	}
 	
-	static String getFunProlog() {
-		// return ".class public Test .....
-		// ...
-		// invokenonvirtual java/lang/Object/<init>()
-		// return
-		// .end method"
-		
-		// 프롤로그 반환
-		return ".class public Test\n"
-				+ ".super java/lang/Object\n"
-				+ "; standard initializer\n"
-				+ ".method public <init>()V\n"
-				+ "aload_0\n"
-				+ "invokenonvirtual java/lang/Object/<init>()V\n"
-				+ "return\n"
-				+ ".end method\n"
-				;
-	}
 	
 	static String getCurrentClassName() {
 		return "Test";

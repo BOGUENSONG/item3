@@ -1,11 +1,16 @@
-int add(int x, int y) {
-	int z ;
-	z = x+y;
-	return z;
+int square(int num, int pas) {
 
+    return num == pas;
 }
 
-void main () {
-	int t = 33;  
-	_print(add(1,t));
+int abc(){
+
+int a = 1;
+
+return !a;
+
+}
+int main(){
+    square(5,3);
+    return 0;
 }

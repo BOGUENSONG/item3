@@ -1,17 +1,15 @@
 package listener.main;
 
 import java.util.HashMap;
-import java.util.Hashtable;
+import java.util.LinkedList;
 import java.util.Map;
+import java.util.Stack;
 
 import generated.MiniCParser;
 import generated.MiniCParser.Fun_declContext;
 import generated.MiniCParser.Local_declContext;
-import generated.MiniCParser.ParamContext;
-import generated.MiniCParser.ParamsContext;
-import generated.MiniCParser.Type_specContext;
+
 import generated.MiniCParser.Var_declContext;
-import listener.main.SymbolTable.Type;
 import static listener.main.BytecodeGenListenerHelper.*;
 
 
@@ -44,7 +42,8 @@ public class SymbolTable {
 	private Map<String, VarInfo> _lsymtable = new HashMap<>();	// local v.
 	private Map<String, VarInfo> _gsymtable = new HashMap<>();	// global v.
 	private Map<String, FInfo> _fsymtable = new HashMap<>();	// function 
-	
+	private Stack<String> _stack = new Stack<>(); //레지스터를 저장할 스택
+	private LinkedList<String> _argsStack = new LinkedList<String>(); // 파라미터 레지스터 스택
 		
 	private int _globalVarID = 0;
 	private int _localVarID = 0;
@@ -58,15 +57,15 @@ public class SymbolTable {
 	
 	void initFunDecl(){		// at each func decl
 		_lsymtable.clear(); //clear lsymtable
-		_localVarID = 0;
-		_labelID = 0;
-		_tempVarID = 32;		
+		_localVarID = -4;
+		_labelID = 4;
+		_tempVarID = 32;
 	}
 	
 	void putLocalVar(String varname, Type type){
 		//<Fill here> 뭐 한번 대충 해보자
 		VarInfo lvar = new VarInfo(type,this._localVarID); //지역변수값으로 VarInfo 객체 생성
-		this._localVarID++; //지역변수 하나를 사용했으니 주소를 하나 증가시켜줌
+		this._localVarID = this._localVarID - 4; //지역변수 하나를 사용했으니 주소를 하나 증가시켜줌
 		this._lsymtable.put(varname, lvar); //심볼테이블에 저장
 	}
 	
@@ -80,7 +79,7 @@ public class SymbolTable {
 	void putLocalVarWithInitVal(String varname, Type type, int initVar){
 		//<Fill here> initVar가 주어졌을때 지역변수 생성
 		VarInfo lvar = new VarInfo(type,this._localVarID,initVar);
-		this._localVarID++;
+		this._localVarID = this._localVarID - 4;
 		this._lsymtable.put(varname, lvar);
 	}
 	void putGlobalVarWithInitVal(String varname, Type type, int initVar){
@@ -111,12 +110,9 @@ public class SymbolTable {
 	}
 	
 	private void initFunTable() {
-		FInfo printlninfo = new FInfo();
-		printlninfo.sigStr = "java/io/PrintStream/println(I)V";
-		
+		// 사용안함 main만 사용함
 		FInfo maininfo = new FInfo();
-		maininfo.sigStr = "main([Ljava/lang/String;)V";
-		_fsymtable.put("_print", printlninfo);
+		maininfo.sigStr = "main:";
 		_fsymtable.put("main", maininfo);
 	}
 	
@@ -133,23 +129,13 @@ public class SymbolTable {
 	public String putFunSpecStr(Fun_declContext ctx) {
 		String fname = getFunName(ctx);
 		String argtype = "";	
-		String rtype = "";
 		String res = "";
 		
 		// <Fill here>	
 		String params = getParamTypesText(ctx.params());
-		params = params.replaceAll("int", "I");
-		params = params.replaceAll("void","V");
 		argtype = params;
 
-		if (isVoidF(ctx)) {
-			rtype ="V";
-		}
-		else {
-			rtype ="I";
-		}
-		
-		res =  fname + "(" + argtype + ")" + rtype;
+		res =  fname + "(" + argtype + ")" + ":";
 		
 		FInfo finfo = new FInfo();
 		finfo.sigStr = res;
@@ -185,7 +171,7 @@ public class SymbolTable {
 		return Type.ERROR;	
 	}
 	String newLabel() {
-		return "label" + _labelID++;
+		return ".L" + _labelID++;
 	}
 	
 	String newTempVar() {
@@ -207,5 +193,60 @@ public class SymbolTable {
 		sname += getVarId(ctx.IDENT().getText());
 		return sname;
 	}
+	public String getRegister() {
+		if (!_stack.isEmpty()) {
+			return this._stack.pop();
+		}
+		else {
+			return "레지스터 스택 오류";
+		}
+	} //스택이 비어있지않을때만 pop함.
+	public void push_hasRegName(String reg) {
+		_stack.push(reg);
+	}
+	public String push_Register() {
+		if (this._stack.isEmpty()) {
+			_stack.push("edx");//스택이 비었을댄 우선적으로 eax를 넣는다.
+			return "edx";
+		}
+		else {
+			if (_stack.get(0) == "edx") {
+				_stack.push("eax"); //스택이 비어있지 않을 때 안에 edx가 있으면 eax를 넣는다.
+				return "eax";
+			}
+			else {
+				_stack.push("edx");
+				return "edx"; //그 반대의 경우 ex를 넣는다.
+			}
+		}
+	}
 	
+	public String push_argStack() {
+		if (this._argsStack.isEmpty()) {
+			this._argsStack.add("edi");
+			return "edi";
+		}
+		else if (this._argsStack.getLast() == "edi")
+		{
+			this._argsStack.add("esi");
+			return "esi";
+		}
+		else {
+			this._argsStack.add("edx");
+			return "edx";
+		}
+	} //argStack 사용
+	
+	public String get_argRegister() {
+		if (!_stack.isEmpty()) {
+			return this._argsStack.remove();
+		}
+		else {
+			return "인자레지스터 스택 오류";
+		}
+	}
+
+
+
+
 }
