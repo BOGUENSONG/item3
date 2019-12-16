@@ -11,7 +11,7 @@ import generated.MiniCParser.ParamsContext;
 import generated.MiniCParser.Type_specContext;
 import generated.MiniCParser.Var_declContext;
 
-public class BytecodeGenListenerHelper {
+public class AssemblyGenListenerHelper {
 	
 	// <boolean functions>
 	

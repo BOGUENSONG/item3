@@ -10,7 +10,7 @@ import generated.MiniCParser.Fun_declContext;
 import generated.MiniCParser.Local_declContext;
 
 import generated.MiniCParser.Var_declContext;
-import static listener.main.BytecodeGenListenerHelper.*;
+import static listener.main.AssemblyGenListenerHelper.*;
 
 
 public class SymbolTable {

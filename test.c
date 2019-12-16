@@ -1,13 +1,13 @@
 int square(int num, int pas) {
 
-    return num == pas;
+    return num + pas;
 }
 
 int abc(){
 
 int a = 1;
 
-return !a;
+return -a;
 
 }
 int main(){

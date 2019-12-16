@@ -43,7 +43,7 @@ public class Translator {
 //				walker.walk(new MiniCPrintListener(), tree ); 이전과제
 				break;
 			case BYTECODEGEN:
-				walker.walk(new BytecodeGenListener(), tree );
+				walker.walk(new AssemblyGenListener(), tree );
 				break;
 			case UCODEGEN:
 //				walker.walk(new UCodeGenListener(), tree ); 다음과젠지뭔지 상관없는거

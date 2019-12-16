@@ -8,10 +8,10 @@ import generated.MiniCParser;
 import generated.MiniCParser.ParamsContext;
 
 
-import static listener.main.BytecodeGenListenerHelper.*;
+import static listener.main.AssemblyGenListenerHelper.*;
 import static listener.main.SymbolTable.*;
 
-public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeListener {
+public class AssemblyGenListener extends MiniCBaseListener implements ParseTreeListener {
 	ParseTreeProperty<String> newTexts = new ParseTreeProperty<String>();
 	SymbolTable symbolTable = new SymbolTable();
 	
