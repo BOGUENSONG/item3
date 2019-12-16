@@ -145,8 +145,7 @@ public class AssemblyGenListener extends MiniCBaseListener implements ParseTreeL
 		String stmt = newTexts.get(ctx.stmt());
 		
 		String temp ="";
-//		temp = loop + ":\n" +expr +  "ifeq " + escape + "\n" + stmt + "goto " + loop + "\n" + escape + ":\n";
-		temp = loop + ":\n" + expr + "jg " + escape + "\n"+ stmt + "jmp " + loop + "\n" + escape + ":\n";
+		temp = loop + ":\n" + expr + "jz " + escape + "\n"+ stmt + "jmp " + loop + "\n" + escape + ":\n";
 		newTexts.put(ctx, temp);
 
 	}
@@ -189,8 +188,6 @@ public class AssemblyGenListener extends MiniCBaseListener implements ParseTreeL
 			
 		}
 		return symbolTable.getFunSpecStr(fname) + "\n"	
-//				+ "\t" + ".limit stack " 	+ getStackSize(ctx) + "\n"
-//				+ "\t" + ".limit locals " 	+ getLocalVarSize(ctx) + "\n";
 				+ " push rbp\n"
 				+ " mov rbp, rsp" + "\n" + variables;
 				 	
@@ -219,8 +216,6 @@ public class AssemblyGenListener extends MiniCBaseListener implements ParseTreeL
 		if (isDeclWithInit(ctx)) {
 			String vId = symbolTable.getVarId(ctx);
 			varDecl += " mov DWORD PTR [rbp" + vId + "]"+ ", " + ctx.LITERAL().getText() + "\n"; 
-//			varDecl += "ldc " + ctx.LITERAL().getText() + "\n"
-//					+ "istore_" + vId + "\n";
 		}
 		
 		newTexts.put(ctx, varDecl);
@@ -313,7 +308,7 @@ public class AssemblyGenListener extends MiniCBaseListener implements ParseTreeL
 				//	expr += "           lda " + symbolTable.get(ctx.IDENT().getText()).value + " \n";
 				} else if (ctx.LITERAL() != null) {
 					String literalStr = ctx.LITERAL().getText();
-					expr += " mov " + symbolTable.push_argStack() + ", " +literalStr + " \n";
+					expr += " mov " + symbolTable.push_Register() + ", " +literalStr + " \n";
 				}
 			} 
 		else if(ctx.getChildCount() == 2) { // UnaryOperation
@@ -324,8 +319,8 @@ public class AssemblyGenListener extends MiniCBaseListener implements ParseTreeL
 				expr = newTexts.get(ctx.expr(0));
 				
 			} else if(ctx.getChild(1).getText().equals("=")) { 	// IDENT '=' expr
-				expr = newTexts.get(ctx.expr(0))
-						+ "istore_" + symbolTable.getVarId(ctx.IDENT().getText()) + " \n";
+				expr = " mov " + symbolTable.push_Register() + ", " + "DWORD PTR [rbp" + symbolTable.getVarId(ctx.IDENT().getText()) + "]\n"
+						+ newTexts.get(ctx.expr(0));
 				
 			} else { 											// binary operation
 				expr = handleBinExpr(ctx, expr);

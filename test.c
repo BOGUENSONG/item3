@@ -5,7 +5,7 @@ int square(int num, int pas) {
 
 int abc(){
 
-int a = 1;
+int a=1;
 
 return -a;
 
